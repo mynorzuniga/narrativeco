@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
+/* Helvetica Now Display is a commercial font; local() lets an OS-installed face load. Stack falls back otherwise. */
+@font-face {
+  font-family: "Helvetica Now Display";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Helvetica Now Display"), local("HelveticaNowDisplay-Regular");
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-body: "Helvetica Now Display", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,15 +24,84 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.font-ds-heading {
+  font-family: var(--font-bebas-neue), Impact, Haettenschweiler, sans-serif;
+}
+
+.font-ds-body {
+  font-family: var(--font-body);
+}
+
+/* Style & foundations hero: visible from frame one; displacement eases in / out via timing */
+@keyframes proto-login-slide-rtl {
+  from {
+    transform: translate3d(108%, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes proto-login-slide-ltr {
+  from {
+    transform: translate3d(-108%, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+/* Matches slide duration; holds black at full opacity, then eases to 30% over the closing beat. */
+@keyframes proto-login-black-dim-after-slide {
+  0%,
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.3;
+  }
+}
+
+.proto-login-line-black-animate {
+  animation: proto-login-black-dim-after-slide 2.95s ease-out both;
+}
+
+.proto-login-line-rtl {
+  will-change: transform;
+  backface-visibility: hidden;
+  /* Moves sooner than ultra-flat easing; still eases before rest */
+  animation: proto-login-slide-rtl 2.95s cubic-bezier(0.39, 0.18, 0.53, 0.93) both;
+}
+
+.proto-login-line-ltr {
+  will-change: transform;
+  backface-visibility: hidden;
+  animation: proto-login-slide-ltr 2.95s cubic-bezier(0.39, 0.18, 0.53, 0.93) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proto-login-line-rtl,
+  .proto-login-line-ltr {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    will-change: auto !important;
+    backface-visibility: visible !important;
+  }
+
+  .proto-login-line-black-animate {
+    animation: none !important;
+    opacity: 1 !important;
+  }
 }
