@@ -11,11 +11,14 @@ import {
 } from "react";
 import { BRAND_PRIMARY_HEX, brandShades, grey, pureBlack, pureWhite } from "../lib/color-palettes";
 import { BODY_SIZES, DISPLAY_LEVELS } from "../lib/typography-scale";
+import { LessonsExperience } from "./lessons-experience";
 import { StyleFoundationsLogin } from "./style-foundations-login";
 import { DsCtaMainButton, DsCtaSecondaryButton } from "../ui/ds-cta-buttons";
 
 const HEADING_1 = DISPLAY_LEVELS[0];
 const HEADING_3 = DISPLAY_LEVELS[2];
+const HEADING_4 =
+  DISPLAY_LEVELS.find((d) => d.level === 4) ?? DISPLAY_LEVELS[3];
 const BODY_STANDARD_REM =
   BODY_SIZES.find((s) => s.id === "standard")?.rem ?? 1;
 
@@ -52,12 +55,12 @@ const EXPERIENCES: ReadonlyArray<{
     previewCta: "secondary",
   },
   {
-    id: "dashboard",
-    title: "Home dashboard",
-    thumbLabel: "Dashboard",
-    thumbBasename: null,
+    id: "lessons",
+    title: "Lessons",
+    thumbLabel: "Lessons",
+    thumbBasename: "2",
     description:
-      "The main shell for day-to-day activity—placeholder until navigation, summary modules, and quick actions are defined with product.",
+      "Lesson lists and detail views are prototyped around usability first: predictable hierarchy, comfortable reading rhythm, and information that lands at a glance. Surfaces reuse the documented palette, typography, and chrome so Lessons feels native to NarrativeCo—not like a detached template.",
     surface: "brand",
     previewCta: "secondary",
   },
@@ -184,11 +187,32 @@ function StyleFoundationsThumbLive({ square = false }: { square?: boolean }) {
   );
 }
 
+function LessonsThumbLive({ square = false }: { square?: boolean }) {
+  return (
+    <div
+      className={
+        square
+          ? "flex h-full w-full items-start justify-center overflow-hidden rounded-none border border-solid bg-white"
+          : "flex h-full w-full items-start justify-center overflow-hidden rounded-md border border-solid border-zinc-200 bg-white"
+      }
+      style={square ? { borderColor: grey[400] } : undefined}
+    >
+      <div
+        className="pointer-events-none w-[390px] shrink-0 scale-[0.18] select-none"
+        style={{ transformOrigin: "top center" }}
+      >
+        <LessonsExperience />
+      </div>
+    </div>
+  );
+}
+
 function thumbCandidates(basename: string) {
   const extensions = ["png", "jpg", "jpeg", "webp"] as const;
+  /** Prefer `/thumbnails/1.png`-style URLs; bare `/thumbnails/1` often 404 in dev without a rewrite. */
   return [
-    `${THUMBNAILS_DIR}/${basename}`,
     ...extensions.map((ext) => `${THUMBNAILS_DIR}/${basename}.${ext}`),
+    `${THUMBNAILS_DIR}/${basename}`,
   ];
 }
 
@@ -244,6 +268,8 @@ function ExperienceThumbnail({
         fallback={
           thumbBasename === "1" ? (
             <StyleFoundationsThumbLive square={frameClassName === "rounded-none"} />
+          ) : thumbBasename === "2" ? (
+            <LessonsThumbLive square={frameClassName === "rounded-none"} />
           ) : (
             <div className={`flex h-full w-full flex-col items-center justify-center border border-dashed border-zinc-300 bg-white p-1 text-center ${frameClassName}`.trim()}>
               <span className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
@@ -439,13 +465,17 @@ export function PrototypeGallery() {
                 const isOpen = openId === exp.id;
                 const openPreview = () => setOpenId(exp.id);
 
+                const previewHeadingFontRem = (
+                  exp.thumbBasename != null ? HEADING_4 : HEADING_3
+                ).rem;
+
                 return (
                   <li
                     key={exp.id}
                     className={`min-w-0 ${previewCellDividerClass(index)}`}
                     style={{ backgroundColor: surfaceBg }}
                   >
-                    <div className="flex w-full flex-col gap-6 p-6 md:flex-row md:items-start md:gap-8 md:p-8">
+                    <div className="flex w-full flex-col gap-6 p-8 md:flex-row md:items-start md:gap-8 md:p-12">
                       <button
                         type="button"
                         onClick={openPreview}
@@ -480,7 +510,7 @@ export function PrototypeGallery() {
                           <h3
                             className="font-ds-heading font-normal tracking-tight text-balance"
                             style={{
-                              fontSize: `${HEADING_3.rem}rem`,
+                              fontSize: `${previewHeadingFontRem}rem`,
                               lineHeight: 1.05,
                               color: typo.headingColor,
                             }}
@@ -565,9 +595,17 @@ export function PrototypeGallery() {
                   Close
                 </button>
               </header>
-              <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+              <div
+                className={
+                  active.id === "lessons"
+                    ? "flex min-h-0 flex-1 flex-col overflow-x-clip overflow-hidden"
+                    : "flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto"
+                }
+              >
                 {active.id === "style-foundations" ? (
                   <StyleFoundationsLogin />
+                ) : active.id === "lessons" ? (
+                  <LessonsExperience />
                 ) : (
                   <PlaceholderPanel label={active.title} />
                 )}
