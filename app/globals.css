@@ -90,6 +90,62 @@ body {
   animation: proto-login-slide-ltr 2.95s cubic-bezier(0.39, 0.18, 0.53, 0.93) both;
 }
 
+/* Loading story — keyword chips snapped to top-left as they scroll into frame */
+@keyframes proto-settings-collect-chip {
+  from {
+    opacity: 0;
+    transform: translate3d(-4px, -6px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.proto-settings-collect-chip {
+  animation: proto-settings-collect-chip 0.55s ease-out forwards;
+}
+
+/* Settings prototype — rewards summary entrance */
+@keyframes proto-rewards-reveal-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.proto-rewards-reveal {
+  opacity: 0;
+  animation: proto-rewards-reveal-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.proto-rewards-reveal-soft {
+  opacity: 0;
+  animation: proto-rewards-reveal-up 0.55s ease-out forwards;
+}
+
+.proto-rewards-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.proto-rewards-delay-2 {
+  animation-delay: 0.22s;
+}
+
+.proto-rewards-delay-3 {
+  animation-delay: 0.38s;
+}
+
+.proto-rewards-delay-4 {
+  animation-delay: 0.54s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .proto-login-line-rtl,
   .proto-login-line-ltr {
@@ -103,5 +159,18 @@ body {
   .proto-login-line-black-animate {
     animation: none !important;
     opacity: 1 !important;
+  }
+
+  .proto-settings-collect-chip {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .proto-rewards-reveal,
+  .proto-rewards-reveal-soft {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

@@ -12,6 +12,7 @@ import {
 import { BRAND_PRIMARY_HEX, brandShades, grey, pureBlack, pureWhite } from "../lib/color-palettes";
 import { BODY_SIZES, DISPLAY_LEVELS } from "../lib/typography-scale";
 import { LessonsExperience } from "./lessons-experience";
+import { SettingsExperience } from "./settings-experience";
 import { StyleFoundationsLogin } from "./style-foundations-login";
 import { DsCtaMainButton, DsCtaSecondaryButton } from "../ui/ds-cta-buttons";
 
@@ -56,50 +57,47 @@ const EXPERIENCES: ReadonlyArray<{
   },
   {
     id: "lessons",
-    title: "Lessons",
-    thumbLabel: "Lessons",
+    title: "Consistency",
+    thumbLabel: "Consistency",
     thumbBasename: "2",
     description:
-      "Lesson lists and detail views are prototyped around usability first: predictable hierarchy, comfortable reading rhythm, and information that lands at a glance. Surfaces reuse the documented palette, typography, and chrome so Lessons feels native to NarrativeCo—not like a detached template.",
+      "Views are prototyped around usability first: predictable hierarchy, comfortable reading rhythm, and information that lands at a glance. Surfaces reuse the documented palette, typography, and chrome so NarrativeCo reads as one consistent system—not like a detached template.",
     surface: "brand",
     previewCta: "secondary",
   },
   {
     id: "settings",
-    title: "Account settings",
-    thumbLabel: "Settings",
-    thumbBasename: null,
+    title: "Rewarding Interaction",
+    thumbLabel: "Rewarding Interaction",
+    thumbBasename: "3",
     description:
-      "Profile and preferences in one predictable surface—pending scope for fields, confirmations, and support links.",
+      "Tiny moments—feedback, motion, rhythm, acknowledgment—carry more weight than the pixel math suggests. Well-timed touches make a screen feel alive, signal care, and give people a sense of purpose in what they tap and finish; this prototype space is where we choreograph those sparks without shouting over the content.",
     surface: "dark",
     previewCta: "main",
-  },
-  {
-    id: "expansion-surfaces",
-    title: "Expansion surfaces",
-    thumbLabel: "Expansion",
-    thumbBasename: null,
-    description:
-      "Placeholder for the next flows to preview—same white field and heavy rule as Style and foundations, ready when narratives are scripted.",
-    surface: "light",
-    previewCta: "secondary",
   },
 ];
 
 /** Internal black dividers: 0.5rem; outer perimeter uses the wrapper border at 0.5rem black. */
-function previewCellDividerClass(index: number) {
-  const isRightColumn = index % 2 === 1;
-  const isBottomRowMd = index >= 2;
+function previewCellDividerClass(index: number, total: number) {
+  const cols = 2;
+  const rowIndex = Math.floor(index / cols);
+  const lastRowIndex = Math.floor((total - 1) / cols);
+  /** Odd count: lone last row spans full grid width — no vertical rule through the middle. */
+  const spanFullWidthMd = index === total - 1 && total % cols === 1;
 
   const parts = [
     "box-border border-solid border-black max-md:border-b-[0.5rem] max-md:last:border-b-0",
   ];
-  if (!isRightColumn) {
+
+  const isRightColumn = index % cols === 1;
+  if (!spanFullWidthMd && !isRightColumn) {
     parts.push("md:border-r-[0.5rem]");
   }
-  if (!isBottomRowMd) {
+
+  if (rowIndex < lastRowIndex) {
     parts.push("md:border-b-[0.5rem]");
   }
+
   return parts.join(" ");
 }
 
@@ -207,6 +205,26 @@ function LessonsThumbLive({ square = false }: { square?: boolean }) {
   );
 }
 
+function SettingsThumbLive({ square = false }: { square?: boolean }) {
+  return (
+    <div
+      className={
+        square
+          ? "flex h-full w-full items-start justify-center overflow-hidden rounded-none border border-solid bg-white"
+          : "flex h-full w-full items-start justify-center overflow-hidden rounded-md border border-solid border-zinc-200 bg-white"
+      }
+      style={square ? { borderColor: grey[400] } : undefined}
+    >
+      <div
+        className="pointer-events-none w-[390px] shrink-0 scale-[0.18] select-none"
+        style={{ transformOrigin: "top center" }}
+      >
+        <SettingsExperience />
+      </div>
+    </div>
+  );
+}
+
 function thumbCandidates(basename: string) {
   const extensions = ["png", "jpg", "jpeg", "webp"] as const;
   /** Prefer `/thumbnails/1.png`-style URLs; bare `/thumbnails/1` often 404 in dev without a rewrite. */
@@ -270,6 +288,8 @@ function ExperienceThumbnail({
             <StyleFoundationsThumbLive square={frameClassName === "rounded-none"} />
           ) : thumbBasename === "2" ? (
             <LessonsThumbLive square={frameClassName === "rounded-none"} />
+          ) : thumbBasename === "3" ? (
+            <SettingsThumbLive square={frameClassName === "rounded-none"} />
           ) : (
             <div className={`flex h-full w-full flex-col items-center justify-center border border-dashed border-zinc-300 bg-white p-1 text-center ${frameClassName}`.trim()}>
               <span className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
@@ -449,6 +469,10 @@ export function PrototypeGallery() {
           <div className="box-border border-[0.5rem] border-solid border-black">
             <ul className="m-0 grid list-none grid-cols-1 gap-0 p-0 md:grid-cols-2">
               {EXPERIENCES.map((exp, index) => {
+                const cols = 2;
+                const spanFullRowMd =
+                  index === EXPERIENCES.length - 1 && EXPERIENCES.length % cols === 1;
+
                 const typo = previewSurfaceTypography(exp.surface);
                 const ghostFocus = previewGhostFocusOutline(exp.surface);
                 const surfaceBg = previewSurfaceBg(exp.surface);
@@ -472,7 +496,7 @@ export function PrototypeGallery() {
                 return (
                   <li
                     key={exp.id}
-                    className={`min-w-0 ${previewCellDividerClass(index)}`}
+                    className={`min-w-0 ${previewCellDividerClass(index, EXPERIENCES.length)}${spanFullRowMd ? " md:col-span-2" : ""}`}
                     style={{ backgroundColor: surfaceBg }}
                   >
                     <div className="flex w-full flex-col gap-6 p-8 md:flex-row md:items-start md:gap-8 md:p-12">
@@ -606,6 +630,8 @@ export function PrototypeGallery() {
                   <StyleFoundationsLogin />
                 ) : active.id === "lessons" ? (
                   <LessonsExperience />
+                ) : active.id === "settings" ? (
+                  <SettingsExperience />
                 ) : (
                   <PlaceholderPanel label={active.title} />
                 )}
