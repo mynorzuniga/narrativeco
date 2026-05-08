@@ -751,7 +751,7 @@ function PostScanCelebration({
                     </fieldset>
                   </div>
 
-                  <div className="proto-settings-collect-chip mt-8 w-full min-w-0 max-w-full">
+                  <div className="proto-settings-collect-chip mt-8 mb-8 w-full min-w-0 max-w-full">
                     <DsCtaMainButton
                       type="button"
                       className="w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
