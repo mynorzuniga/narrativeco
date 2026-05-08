@@ -1,13 +1,14 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
-  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import {
   BRAND_PRIMARY_HEX,
   brandShades,
@@ -21,8 +22,8 @@ import { DsCtaMainButton } from "../ui/ds-cta-buttons";
 
 const HEADING_1 = DISPLAY_LEVELS.find((l) => l.level === 1)!;
 const HEADING_3 = DISPLAY_LEVELS[2];
+const HEADING_4 = DISPLAY_LEVELS.find((l) => l.level === 4)!;
 const HEADING_5 = DISPLAY_LEVELS.find((l) => l.level === 5)!;
-const HEADING_6 = DISPLAY_LEVELS[5];
 
 const BODY_STANDARD_REM =
   BODY_SIZES.find((s) => s.id === "standard")?.rem ?? 1;
@@ -39,75 +40,35 @@ const LESSON_INDICATOR_NUMBER = 12;
 const STORY_PREFILL_TIME_TRAVEL =
   "The vestibule liquefied into shimmering chronos—velvet static clung to my sleeves while brass harmonics hunted my heartbeat through graphite fog scented with unborn storms. Echoes landed bright and premature; a vertiginous future leaned close, humming itineraries only a restless paradox understands.";
 
-const COLLECT_KEYWORDS = ["heartbeat", "echoes", "restless"] as const;
+/** Keywords to highlight in scan order (must appear in sample story). */
+const SCAN_KEYWORDS_ORDER = ["heartbeat", "echoes", "restless"] as const;
 
-type CollectKeyword = (typeof COLLECT_KEYWORDS)[number];
-
-const COLLECT_LABEL: Record<CollectKeyword, string> = {
-  heartbeat: "Heartbeat",
-  echoes: "Echoes",
-  restless: "Restless",
-};
-
-const HIGHLIGHT_PATTERN = /\b(heartbeat|echoes|restless)\b/gi;
-
-function canonKeyword(match: string): CollectKeyword | null {
-  const k = match.toLowerCase();
-  if (k === "heartbeat" || k === "echoes" || k === "restless") {
-    return k;
-  }
-  return null;
+function normalizeWordForKeyword(word: string): string {
+  return word.replace(/^\W+|\W+$/gu, "").toLowerCase();
 }
 
-function storyLineCollectableForScroll(
-  text: string,
-  brand500: string,
-  lanePrefix: string,
-  bindRef: (keyword: CollectKeyword, el: HTMLElement | null) => void,
-): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let nodeKey = 0;
-  let lastIndex = 0;
-  HIGHLIGHT_PATTERN.lastIndex = 0;
+/** First occurrence index per keyword, in story order. */
+function findKeywordWordIndices(words: ReadonlyArray<string>): number[] | null {
+  const consumed = new Set<number>();
+  const indices: number[] = [];
 
-  let match: RegExpExecArray | null;
-  while ((match = HIGHLIGHT_PATTERN.exec(text)) !== null) {
-    const [word] = match;
-    const { index } = match;
-    if (index > lastIndex) {
-      nodes.push(text.slice(lastIndex, index));
+  for (const key of SCAN_KEYWORDS_ORDER) {
+    const idx = words.findIndex((w, i) => {
+      if (consumed.has(i)) return false;
+      return normalizeWordForKeyword(w) === key;
+    });
+    if (idx < 0) {
+      return null;
     }
-    const kw = canonKeyword(word);
-    if (kw !== null) {
-      nodes.push(
-        <span
-          key={`${lanePrefix}-${kw}-${nodeKey}`}
-          ref={(el) => bindRef(kw, el)}
-          data-collect-keyword={kw}
-          style={{ color: brand500 }}
-        >
-          {word}
-        </span>,
-      );
-    } else {
-      nodes.push(word);
-    }
-    lastIndex = index + word.length;
+    consumed.add(idx);
+    indices.push(idx);
   }
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-  return nodes;
+
+  return indices;
 }
 
-const SCROLL_SPEED_PX_PER_SEC = 460;
-
-/** Heading 6 / black — ticker line tokens (stable ref for animation effect). */
-const HEADING_6_SCROLL_LINE_STYLE: CSSProperties = {
-  fontSize: `${HEADING_6.rem}rem`,
-  lineHeight: 1.05,
-  color: pureBlack,
-};
+/** Title-case labels aligned with `SCAN_KEYWORDS_ORDER` (story keywords). */
+const SCAN_KEYWORD_HEADING_LABELS = ["Heartbeat", "Echoes", "Restless"] as const;
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -140,6 +101,318 @@ type LessonSentimentId = (typeof LESSON_SENTIMENT_OPTIONS)[number]["id"];
 
 /** Matches `.proto-settings-collect-chip` duration in `globals.css`. */
 const CELEBRATION_CHIP_MS = 550;
+
+/** Brief pause after the last on-story keyword pulse before the anchor “page”. */
+const STORY_EVAL_BEFORE_ANCHOR_PAGE_MS = 600;
+
+/** Fade-out for “Evaluating” + story before anchor handoff (not used if reduce motion). */
+const STORY_PHASE_EXIT_MS = 620;
+/** Pace for revealing each anchor line (one under the next). */
+const ANCHOR_STACK_STAGGER_MS = 380;
+/** Breath after last line’s entrance before Great Job / sentiment. */
+const ANCHOR_STACK_SETTLE_MS = 300;
+
+/** Story evaluation: text fade-in, then scan pass, then three “selected” words. */
+const STORY_EVAL_ENTER_MS = 1100;
+/** Duration of sliding grey-window scan (left → right; max 4 words grey at once). */
+const STORY_EVAL_GREY_SWEEP_MS = 4200;
+const STORY_EVAL_FINAL_KEYWORD_MS = 1500;
+
+/** Up to this many adjacent words may use muted grey during the scan pass. */
+const SCAN_GREY_WINDOW_SIZE = 4;
+
+/** Muted sweep: lighter than body black so the sliding window stays readable. */
+const SCAN_WORD_GREY = grey[400];
+
+function StoryEvaluationScan({
+  text,
+  brand500,
+  reduceMotion,
+  onComplete,
+}: {
+  text: string;
+  brand500: string;
+  reduceMotion: boolean;
+  onComplete: () => void;
+}) {
+  const words = useMemo(() => text.trim().split(/\s+/).filter(Boolean), [text]);
+  const keywordIndices = useMemo(() => findKeywordWordIndices(words), [words]);
+
+  const orderByWordIndex = useMemo(() => {
+    const m = new Map<number, number>();
+    keywordIndices?.forEach((wordIndex, order) => {
+      m.set(wordIndex, order);
+    });
+    return m;
+  }, [keywordIndices]);
+
+  const parentNotifiedRef = useRef(false);
+
+  const notifyParent = useCallback(() => {
+    if (parentNotifiedRef.current) return;
+    parentNotifiedRef.current = true;
+    onComplete();
+  }, [onComplete]);
+
+  const [textOpacity, setTextOpacity] = useState(0);
+  /** enter → fade; scan → sliding grey; pick0–2 → keyword pulses on story text. */
+  const [phase, setPhase] = useState<
+    "enter" | "scan" | "pick0" | "pick1" | "pick2"
+  >("enter");
+  /**
+   * In scan phase, grey applies to indices in [scanGreyWindowStart, scanGreyWindowStart + WINDOW).
+   * Advances 0 → words.length so the window slides left-to-right and ends with all black.
+   */
+  const [scanGreyWindowStart, setScanGreyWindowStart] = useState(0);
+
+  const paragraphShellStyle: CSSProperties & { ["--proto-scan-brand"]?: string } = {
+    ["--proto-scan-brand"]: brand500,
+  };
+
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => setTextOpacity(1));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+
+  useEffect(() => {
+    if (words.length === 0) {
+      notifyParent();
+      return;
+    }
+    if (!keywordIndices || keywordIndices.length < SCAN_KEYWORDS_ORDER.length) {
+      const id = window.setTimeout(notifyParent, 60);
+      return () => window.clearTimeout(id);
+    }
+
+    if (reduceMotion) {
+      setTextOpacity(1);
+      setPhase("pick2");
+      const id = window.setTimeout(notifyParent, 80);
+      return () => window.clearTimeout(id);
+    }
+
+    let cancelled = false;
+    const t0 = STORY_EVAL_ENTER_MS;
+    const tScanEnd = t0 + STORY_EVAL_GREY_SWEEP_MS;
+    const tPick0 = tScanEnd;
+    const tPick1 = tPick0 + STORY_EVAL_FINAL_KEYWORD_MS;
+    const tPick2 = tPick1 + STORY_EVAL_FINAL_KEYWORD_MS;
+    const tStoryComplete =
+      tPick2 + STORY_EVAL_FINAL_KEYWORD_MS + STORY_EVAL_BEFORE_ANCHOR_PAGE_MS;
+
+    const ids: number[] = [
+      window.setTimeout(() => {
+        if (!cancelled) setPhase("scan");
+      }, t0),
+      window.setTimeout(() => {
+        if (!cancelled) setPhase("pick0");
+      }, tPick0),
+      window.setTimeout(() => {
+        if (!cancelled) setPhase("pick1");
+      }, tPick1),
+      window.setTimeout(() => {
+        if (!cancelled) setPhase("pick2");
+      }, tPick2),
+      window.setTimeout(() => {
+        if (!cancelled) notifyParent();
+      }, tStoryComplete),
+    ];
+
+    return () => {
+      cancelled = true;
+      ids.forEach((id) => window.clearTimeout(id));
+    };
+  }, [words.length, keywordIndices, reduceMotion, notifyParent]);
+
+  useEffect(() => {
+    if (phase !== "scan" || reduceMotion || words.length === 0) {
+      return;
+    }
+
+    setScanGreyWindowStart(0);
+    const start = performance.now();
+    const duration = STORY_EVAL_GREY_SWEEP_MS;
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const n = words.length;
+      const next = Math.min(n, Math.floor(t * (n + 1)));
+      setScanGreyWindowStart(next);
+      if (t < 1) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [phase, words.length, reduceMotion]);
+
+  const wordNodes = words.map((word, i) => {
+    const o = orderByWordIndex.get(i);
+    const activeFinal =
+      (phase === "pick0" && o === 0) ||
+      (phase === "pick1" && o === 1) ||
+      (phase === "pick2" && o === 2);
+
+    const lockedAfter =
+      o !== undefined &&
+      ((phase === "pick1" && o === 0) ||
+        (phase === "pick2" && (o === 0 || o === 1)));
+
+    const showBrand =
+      activeFinal ||
+      lockedAfter ||
+      (reduceMotion && o !== undefined);
+
+    const inGreyWindow =
+      phase === "scan" &&
+      i >= scanGreyWindowStart &&
+      i < scanGreyWindowStart + SCAN_GREY_WINDOW_SIZE;
+
+    const color = showBrand
+      ? brand500
+      : inGreyWindow
+        ? SCAN_WORD_GREY
+        : pureBlack;
+
+    const klass = [
+      !reduceMotion && activeFinal ? "proto-settings-scan-hit" : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const style: CSSProperties = {
+      color,
+      fontWeight: 400,
+      transition: "color 0.22s ease-out",
+    };
+
+    return (
+      <Fragment key={`eval-${i}-${word.slice(0, 20)}`}>
+        {i > 0 ? " " : null}
+        <span className={klass || undefined} style={style}>
+          {word}
+        </span>
+      </Fragment>
+    );
+  });
+
+  const evaluatingStatusStyle: CSSProperties = {
+    fontSize: `${HEADING_4.rem}rem`,
+    lineHeight: 1.05,
+    color: pureBlack,
+  };
+
+  return (
+    <>
+      <div className="flex w-full min-w-0 flex-col items-center">
+        <div
+          className="flex w-full max-w-prose flex-col items-center py-2 transition-opacity duration-[1050ms] ease-out"
+          style={{
+            ...paragraphShellStyle,
+            gap: `${BODY_SMALL_REM}rem`,
+            opacity: reduceMotion ? 1 : textOpacity,
+          }}
+        >
+          <p
+            className="m-0 text-center font-ds-heading font-normal tracking-tight text-balance"
+            role="status"
+            aria-live="polite"
+            style={evaluatingStatusStyle}
+          >
+            Evaluating
+            {!reduceMotion ? (
+              <span className="proto-settings-evaluating-dots" aria-hidden>
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            ) : (
+              "…"
+            )}
+          </p>
+          <p
+            className="m-0 text-center font-ds-body font-normal text-pretty break-words leading-relaxed"
+            style={{
+              fontSize: `${BODY_STANDARD_REM}rem`,
+              color: pureBlack,
+            }}
+          >
+            {wordNodes}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Three anchor words — reveal one under the next, then `onStackComplete`. */
+function AnchorKeywordsCluster({
+  brand500,
+  reduceMotion,
+  onStackComplete,
+}: {
+  brand500: string;
+  reduceMotion: boolean;
+  onStackComplete?: () => void;
+}) {
+  const [revealed, setRevealed] = useState(0);
+
+  const headingStyle: CSSProperties = {
+    fontSize: `${HEADING_4.rem}rem`,
+    lineHeight: 1.05,
+    color: brand500,
+  };
+
+  useEffect(() => {
+    if (!onStackComplete) return;
+
+    if (reduceMotion) {
+      setRevealed(SCAN_KEYWORDS_ORDER.length);
+      const id = window.setTimeout(onStackComplete, 60);
+      return () => window.clearTimeout(id);
+    }
+
+    const stagger = ANCHOR_STACK_STAGGER_MS;
+    const ids: number[] = [];
+    for (let k = 1; k <= SCAN_KEYWORDS_ORDER.length; k++) {
+      ids.push(
+        window.setTimeout(() => setRevealed(k), stagger * (k - 1)),
+      );
+    }
+    const lastStart = stagger * (SCAN_KEYWORDS_ORDER.length - 1);
+    ids.push(
+      window.setTimeout(
+        onStackComplete,
+        lastStart + CELEBRATION_CHIP_MS + ANCHOR_STACK_SETTLE_MS,
+      ),
+    );
+    return () => ids.forEach((id) => window.clearTimeout(id));
+  }, [onStackComplete, reduceMotion]);
+
+  return (
+    <div
+      className="proto-settings-anchor-stack mx-auto w-full max-w-prose self-start"
+      aria-label="Anchor words from your story"
+    >
+      <div className="flex w-full flex-col items-start gap-[0.35rem] text-left">
+        {SCAN_KEYWORD_HEADING_LABELS.map((label, i) => {
+          if (revealed <= i) return null;
+          return (
+            <h4
+              key={label}
+              className="m-0 w-full font-ds-heading font-normal capitalize tracking-tight proto-settings-collect-chip"
+              style={headingStyle}
+            >
+              {label.toLowerCase()}
+            </h4>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function RewardsSummaryView() {
   const rewardsHeadingId = "rewards-summary-heading";
@@ -258,15 +531,14 @@ function RewardsStatRow({
   );
 }
 
-function LoadingLeftStack({
-  collected,
+/** Great Job, explanation, and sentiment — flows below the scan (no full-screen overlay). */
+function PostScanCelebration({
   brand500,
-  marqueeFinished,
+  revealFinished,
   onContinue,
 }: {
-  collected: Record<CollectKeyword, boolean>;
   brand500: string;
-  marqueeFinished: boolean;
+  revealFinished: boolean;
   onContinue?: () => void;
 }) {
   const reduceMotion = usePrefersReducedMotion();
@@ -292,7 +564,7 @@ function LoadingLeftStack({
   };
 
   useEffect(() => {
-    if (!marqueeFinished) {
+    if (!revealFinished) {
       setShowCelebrationParagraph(false);
       setSentimentUiVisible(false);
       setLessonSentiment(null);
@@ -309,7 +581,7 @@ function LoadingLeftStack({
       }, CELEBRATION_CHIP_MS);
       return () => window.clearTimeout(id);
     }
-  }, [marqueeFinished, reduceMotion]);
+  }, [revealFinished, reduceMotion]);
 
   useEffect(() => {
     if (!showCelebrationParagraph) {
@@ -324,34 +596,15 @@ function LoadingLeftStack({
     }
   }, [showCelebrationParagraph, reduceMotion]);
 
-  return (
-    <div
-      className="pointer-events-none absolute inset-x-0 top-0 z-10 box-border flex min-w-0 flex-col gap-0.5"
-      style={{ padding: "1rem" }}
-    >
-      <div className="min-w-0 max-w-prose" aria-hidden={true}>
-        {COLLECT_KEYWORDS.map((kw) =>
-          collected[kw] ? (
-            <span
-              key={kw}
-              className="font-ds-heading font-normal tracking-tight proto-settings-collect-chip block"
-              style={{
-                fontSize: `${HEADING_6.rem}rem`,
-                lineHeight: 1.05,
-                color: brand500,
-              }}
-            >
-              {COLLECT_LABEL[kw]}
-            </span>
-          ) : null,
-        )}
-      </div>
+  if (!revealFinished) {
+    return null;
+  }
 
-      {marqueeFinished ? (
-        <div
-          aria-live="polite"
-          className="pointer-events-auto mt-4 flex min-w-0 max-w-prose flex-col"
-        >
+  return (
+    <section
+      aria-live="polite"
+      className="mx-auto mt-8 flex w-full min-w-0 max-w-prose flex-col"
+    >
           <h1
             className="m-0 font-ds-heading font-normal tracking-tight text-balance proto-settings-collect-chip"
             style={headingStyle}
@@ -375,15 +628,15 @@ function LoadingLeftStack({
                 }}
               >
                 Spotting anchors like{" "}
-                <span className="font-semibold" style={{ color: brand500 }}>
+                <span className="font-normal" style={{ color: brand500 }}>
                   Heartbeat
                 </span>
                 ,{" "}
-                <span className="font-semibold" style={{ color: brand500 }}>
+                <span className="font-normal" style={{ color: brand500 }}>
                   Echoes
                 </span>
                 , and{" "}
-                <span className="font-semibold" style={{ color: brand500 }}>
+                <span className="font-normal" style={{ color: brand500 }}>
                   Restless
                 </span>{" "}
                 ties feeling to structure—so someone else can trace how the lesson
@@ -408,7 +661,7 @@ function LoadingLeftStack({
                   </div>
 
                   <div
-                    className="proto-settings-collect-chip pointer-events-auto min-w-0"
+                    className="proto-settings-collect-chip min-w-0"
                     style={{
                       marginLeft: "-1rem",
                       marginRight: "-1rem",
@@ -512,13 +765,11 @@ function LoadingLeftStack({
               ) : null}
             </>
           ) : null}
-        </div>
-      ) : null}
-    </div>
+    </section>
   );
 }
 
-function LoadingStoryScroller({
+function LoadingAfterSubmit({
   fullText,
   brand500,
   onRewardsContinue,
@@ -527,155 +778,90 @@ function LoadingStoryScroller({
   brand500: string;
   onRewardsContinue?: () => void;
 }) {
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const keywordRefs = useRef<Partial<Record<CollectKeyword, HTMLElement | null>>>(
-    {},
-  );
-
   const reduceMotion = usePrefersReducedMotion();
-  const [marqueeFinished, setMarqueeFinished] = useState(false);
-  const [collected, setCollected] = useState<
-    Record<CollectKeyword, boolean>
-  >({
-    heartbeat: false,
-    echoes: false,
-    restless: false,
-  });
+  const [postFlow, setPostFlow] = useState<
+    "story" | "storyExit" | "anchor" | "celebration"
+  >("story");
 
-  const bindKeywordRef = useCallback(
-    (keyword: CollectKeyword, el: HTMLElement | null) => {
-      keywordRefs.current[keyword] = el;
-    },
-    [],
-  );
-
-  useLayoutEffect(() => {
+  const handleStoryComplete = useCallback(() => {
     if (reduceMotion) {
-      setCollected((prev) =>
-        prev.heartbeat && prev.echoes && prev.restless
-          ? prev
-          : { heartbeat: true, echoes: true, restless: true },
-      );
-      return;
+      setPostFlow("anchor");
+    } else {
+      setPostFlow("storyExit");
     }
-
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        setCollected((prev) => {
-          let next = prev;
-          for (const e of entries) {
-            if (!(e.target instanceof HTMLElement) || !e.isIntersecting) {
-              continue;
-            }
-            const raw = e.target.dataset.collectKeyword as CollectKeyword | undefined;
-            if (!raw || !COLLECT_KEYWORDS.includes(raw)) continue;
-            if (!prev[raw]) {
-              if (next === prev) next = { ...prev };
-              next[raw] = true;
-            }
-          }
-          return next;
-        });
-      },
-      {
-        root: viewport,
-        rootMargin: "-2px",
-        threshold: [0.02, 0.1],
-      },
-    );
-
-    for (const kw of COLLECT_KEYWORDS) {
-      const el = keywordRefs.current[kw];
-      if (el) obs.observe(el);
-    }
-
-    return () => obs.disconnect();
   }, [reduceMotion]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
-    const track = trackRef.current;
-    if (!viewport || !track || reduceMotion) {
-      return;
-    }
-
-    const vw = viewport.clientWidth;
-    const tw = track.scrollWidth;
-    const translateStart = vw;
-    const translateEnd = -tw;
-    const distancePx = vw + tw;
-    const durationMs = Math.round(
-      Math.min(Math.max((distancePx / SCROLL_SPEED_PX_PER_SEC) * 1000, 5200), 18000),
+    if (postFlow !== "storyExit") return;
+    const id = window.setTimeout(
+      () => setPostFlow("anchor"),
+      STORY_PHASE_EXIT_MS,
     );
+    return () => window.clearTimeout(id);
+  }, [postFlow]);
 
-    track.getAnimations().forEach((a) => a.cancel());
-    track.style.transform = `translate3d(${translateStart}px, 0, 0)`;
+  const handleAnchorStackComplete = useCallback(() => {
+    setPostFlow("celebration");
+  }, []);
 
-    let alive = true;
-    const anim = track.animate(
-      [
-        { transform: `translate3d(${translateStart}px, 0, 0)` },
-        { transform: `translate3d(${translateEnd}px, 0, 0)` },
-      ],
-      {
-        duration: durationMs,
-        easing: "linear",
-        fill: "forwards",
-      },
-    );
+  const showStory =
+    postFlow === "story" || postFlow === "storyExit";
 
-    void anim.finished
-      .then(() => {
-        if (!alive) return;
-        setMarqueeFinished(true);
-      })
-      .catch(() => {});
-
-    return () => {
-      alive = false;
-      anim.cancel();
-    };
-  }, [reduceMotion, fullText]);
-
-  useEffect(() => {
-    if (!reduceMotion) return;
-    const track = trackRef.current;
-    const viewport = viewportRef.current;
-    if (!track || !viewport) return;
-    const tw = track.scrollWidth;
-    track.style.transform = `translate3d(${-tw}px, 0, 0)`;
-    setMarqueeFinished(true);
-  }, [reduceMotion, fullText]);
+  const storyHandoffOpacity = postFlow === "storyExit" ? 0 : 1;
 
   return (
-    <div
-      ref={viewportRef}
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
-    >
-      <LoadingLeftStack
-        collected={collected}
-        brand500={brand500}
-        marqueeFinished={marqueeFinished}
-        onContinue={onRewardsContinue}
-      />
-      <div className="flex min-h-0 min-w-0 w-full flex-1 items-center overflow-hidden">
-        <div ref={trackRef} className="flex w-max shrink-0 will-change-transform flex-row flex-nowrap">
-          <span
-            className="inline-block whitespace-nowrap font-ds-heading font-normal tracking-tight"
-            style={HEADING_6_SCROLL_LINE_STYLE}
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col justify-start px-4 pb-12 pt-6">
+        {showStory ? (
+          <div
+            className={
+              reduceMotion
+                ? "w-full"
+                : "w-full transition-[opacity] ease-out motion-reduce:transition-none"
+            }
+            style={
+              reduceMotion
+                ? undefined
+                : {
+                    opacity: storyHandoffOpacity,
+                    transitionDuration: `${STORY_PHASE_EXIT_MS}ms`,
+                  }
+            }
+            aria-hidden={postFlow === "storyExit"}
           >
-            {storyLineCollectableForScroll(
-              fullText,
-              brand500,
-              "scroll",
-              bindKeywordRef,
+            <StoryEvaluationScan
+              text={fullText}
+              brand500={brand500}
+              reduceMotion={reduceMotion}
+              onComplete={handleStoryComplete}
+            />
+          </div>
+        ) : null}
+
+        {postFlow !== "story" && postFlow !== "storyExit" ? (
+          <>
+            <div
+              className={
+                reduceMotion
+                  ? "w-full"
+                  : "proto-settings-post-story-handoff-enter w-full"
+              }
+            >
+              <AnchorKeywordsCluster
+                brand500={brand500}
+                reduceMotion={reduceMotion}
+                onStackComplete={handleAnchorStackComplete}
+              />
+            </div>
+            {postFlow === "celebration" && (
+              <PostScanCelebration
+                brand500={brand500}
+                revealFinished={true}
+                onContinue={onRewardsContinue}
+              />
             )}
-          </span>
-        </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -720,9 +906,9 @@ export function SettingsExperience() {
           aria-busy={true}
           aria-live="polite"
           aria-label="Submitting your story"
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
         >
-          <LoadingStoryScroller
+          <LoadingAfterSubmit
             fullText={STORY_PREFILL_TIME_TRAVEL}
             brand500={brand[500]}
             onRewardsContinue={() => setPhase("rewards")}

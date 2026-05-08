@@ -107,6 +107,93 @@ body {
   animation: proto-settings-collect-chip 0.55s ease-out forwards;
 }
 
+/* Settings prototype — story text reveals word-by-word (wraps naturally) */
+@keyframes proto-settings-word-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.proto-settings-word-reveal {
+  opacity: 0;
+  animation: proto-settings-word-fade 0.38s ease-out forwards;
+}
+
+/* Settings prototype — keyword “scan” pulse (uses --proto-scan-brand on parent) */
+@keyframes proto-settings-scan-hit {
+  0% {
+    text-shadow: 0 0 0 transparent;
+    filter: brightness(1);
+  }
+
+  45% {
+    text-shadow:
+      0 0 20px color-mix(in srgb, var(--proto-scan-brand, currentColor) 55%, transparent),
+      0 0 6px color-mix(in srgb, var(--proto-scan-brand, currentColor) 35%, transparent);
+    filter: brightness(1.12);
+  }
+
+  100% {
+    text-shadow: 0 0 8px color-mix(in srgb, var(--proto-scan-brand, currentColor) 22%, transparent);
+    filter: brightness(1.04);
+  }
+}
+
+.proto-settings-scan-hit {
+  animation: proto-settings-scan-hit 0.58s ease-in-out forwards;
+}
+
+/* Settings prototype — “Evaluating…” loading dots */
+@keyframes proto-settings-evaluating-dot {
+
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.proto-settings-evaluating-dots > span {
+  display: inline-block;
+  animation: proto-settings-evaluating-dot 1.05s ease-in-out infinite;
+}
+
+.proto-settings-evaluating-dots > span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.proto-settings-evaluating-dots > span:nth-child(2) {
+  animation-delay: 0.175s;
+}
+
+.proto-settings-evaluating-dots > span:nth-child(3) {
+  animation-delay: 0.35s;
+}
+
+/* Settings prototype — after story fades out, incoming block (anchors) */
+@keyframes proto-settings-post-story-handoff-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.proto-settings-post-story-handoff-enter {
+  animation: proto-settings-post-story-handoff-in 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* Settings prototype — rewards summary entrance */
 @keyframes proto-rewards-reveal-up {
   from {
@@ -162,6 +249,28 @@ body {
   }
 
   .proto-settings-collect-chip {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .proto-settings-word-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .proto-settings-scan-hit {
+    animation: none !important;
+    filter: none !important;
+    text-shadow: none !important;
+  }
+
+  .proto-settings-evaluating-dots > span {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .proto-settings-post-story-handoff-enter {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
