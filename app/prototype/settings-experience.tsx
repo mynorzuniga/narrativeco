@@ -306,9 +306,9 @@ function StoryEvaluationScan({
 
   return (
     <>
-      <div className="flex w-full min-w-0 flex-col items-center">
+      <div className="flex w-full min-w-0 flex-col items-start">
         <div
-          className="flex w-full max-w-prose flex-col items-center py-2 transition-opacity duration-[1050ms] ease-out"
+          className="flex w-full max-w-prose flex-col items-start py-2 transition-opacity duration-[1050ms] ease-out"
           style={{
             ...paragraphShellStyle,
             gap: `${BODY_SMALL_REM}rem`,
@@ -316,7 +316,7 @@ function StoryEvaluationScan({
           }}
         >
           <p
-            className="m-0 text-center font-ds-heading font-normal tracking-tight text-balance"
+            className="m-0 text-left font-ds-heading font-normal tracking-tight text-balance"
             role="status"
             aria-live="polite"
             style={evaluatingStatusStyle}
@@ -333,7 +333,7 @@ function StoryEvaluationScan({
             )}
           </p>
           <p
-            className="m-0 text-center font-ds-body font-normal text-pretty break-words leading-relaxed"
+            className="m-0 text-left font-ds-body font-normal text-pretty break-words leading-relaxed"
             style={{
               fontSize: `${BODY_STANDARD_REM}rem`,
               color: pureBlack,
